@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 def get_music_root() -> Path:
@@ -49,6 +49,22 @@ def validate_selected_dirs(selected_dirs: list[str], root: Path | None = None) -
     return validated
 
 
+def prune_selected_dirs(dirs: list[Path]) -> list[Path]:
+    """
+    Drop directories that are inside another selected directory.
+    Avoids walking the same files twice without keeping a giant path set.
+    """
+    if not dirs:
+        return []
+    ordered = sorted({d.resolve() for d in dirs}, key=lambda p: (len(p.parts), str(p)))
+    kept: list[Path] = []
+    for d in ordered:
+        if any(d == parent or parent in d.parents for parent in kept):
+            continue
+        kept.append(d)
+    return kept
+
+
 def build_folder_tree(root: Path | None = None) -> dict[str, Any]:
     """
     Build a recursive folder-only tree rooted at MUSIC_PATH.
@@ -83,23 +99,19 @@ def find_flac_files(selected_dirs: list[str], root: Path | None = None) -> list[
     Recursively find every .flac / .FLAC under each selected folder using os.walk().
     Deduplicates paths. Rejects selections outside MUSIC_PATH.
     """
-    return sorted(set(iter_flac_files(selected_dirs, root)))
+    return list(iter_flac_files(selected_dirs, root))
 
 
-def iter_flac_files(selected_dirs: list[str], root: Path | None = None):
+def iter_flac_files(selected_dirs: list[str], root: Path | None = None) -> Iterator[str]:
     """
-    Yield FLAC paths under selected folders via os.walk(), without buffering all paths.
-    Deduplicates across overlapping selections. Rejects paths outside MUSIC_PATH.
+    Yield FLAC paths under selected folders via os.walk().
+    Parent selections subsume children so paths are not buffered in a giant set.
     """
     if root is None:
         root = get_music_root()
-    dirs = validate_selected_dirs(selected_dirs, root)
-    seen: set[str] = set()
+    dirs = prune_selected_dirs(validate_selected_dirs(selected_dirs, root))
     for directory in dirs:
         for dirpath, _dirnames, filenames in os.walk(directory):
             for name in filenames:
                 if name.lower().endswith(".flac"):
-                    full = str(Path(dirpath) / name)
-                    if full not in seen:
-                        seen.add(full)
-                        yield full
+                    yield str(Path(dirpath) / name)
