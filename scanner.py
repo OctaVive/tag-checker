@@ -83,13 +83,23 @@ def find_flac_files(selected_dirs: list[str], root: Path | None = None) -> list[
     Recursively find every .flac / .FLAC under each selected folder using os.walk().
     Deduplicates paths. Rejects selections outside MUSIC_PATH.
     """
+    return sorted(set(iter_flac_files(selected_dirs, root)))
+
+
+def iter_flac_files(selected_dirs: list[str], root: Path | None = None):
+    """
+    Yield FLAC paths under selected folders via os.walk(), without buffering all paths.
+    Deduplicates across overlapping selections. Rejects paths outside MUSIC_PATH.
+    """
     if root is None:
         root = get_music_root()
     dirs = validate_selected_dirs(selected_dirs, root)
-    found: set[str] = set()
+    seen: set[str] = set()
     for directory in dirs:
         for dirpath, _dirnames, filenames in os.walk(directory):
             for name in filenames:
                 if name.lower().endswith(".flac"):
-                    found.add(str(Path(dirpath) / name))
-    return sorted(found)
+                    full = str(Path(dirpath) / name)
+                    if full not in seen:
+                        seen.add(full)
+                        yield full

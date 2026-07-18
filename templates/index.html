@@ -9,7 +9,6 @@
 {% else %}
 
 <div class="row g-4">
-  {# Left: folder tree + selection #}
   <div class="col-lg-5">
     <div class="panel p-3 mb-3">
       <div class="d-flex justify-content-between align-items-center mb-2">
@@ -24,66 +23,39 @@
       <div id="selected-chips" class="chip-list mb-3">
         <span class="muted small" id="no-selection-hint">None selected</span>
       </div>
-      <form
-        id="scan-form"
-        hx-post="/scan"
-        hx-target="#preview-area"
-        hx-swap="innerHTML"
-        hx-indicator="#scan-spinner"
-      >
-        <input type="hidden" name="albumartist" id="scan-albumartist" value="">
-        <button type="submit" class="btn btn-accent w-100" id="scan-btn" disabled>
-          Scan
-          <span id="scan-spinner" class="htmx-indicator spinner-border spinner-border-sm ms-1" role="status"></span>
-        </button>
-      </form>
+      <p class="muted small mb-0">
+        Apply walks each selected folder (including subfolders) and sets AlbumArtist to
+        <strong>{{ target_albumartist }}</strong>. Only that tag is changed.
+      </p>
     </div>
   </div>
 
-  {# Right: AlbumArtist + preview + apply #}
   <div class="col-lg-7">
     <div class="panel p-3 mb-3">
-      <div class="panel-title">New AlbumArtist</div>
-      <div class="input-group mb-3">
-        <input
-          type="text"
-          class="form-control"
-          id="albumartist-input"
-          name="albumartist"
-          placeholder="e.g. Various Artists"
-          autocomplete="off"
-          hx-post="/preview"
-          hx-trigger="keyup changed delay:300ms"
-          hx-target="#preview-area"
-          hx-swap="innerHTML"
-          hx-include="[name='albumartist']"
-        >
-      </div>
-      <p class="muted small mb-3">Preview updates as you type. Apply writes only the AlbumArtist tag.</p>
+      <div class="panel-title">Bulk apply</div>
+      <p class="mb-3">
+        Target AlbumArtist:
+        <span class="new-aa-cell">{{ target_albumartist }}</span>
+      </p>
       <form
         id="apply-form"
         hx-post="/apply"
         hx-target="#apply-status"
         hx-swap="outerHTML"
+        hx-indicator="#apply-spinner"
       >
-        <input type="hidden" name="albumartist" id="apply-albumartist" value="">
+        {# Checkboxes use form="apply-form" in tree.html #}
         <button type="submit" class="btn btn-success" id="apply-btn" disabled>
-          Apply
+          Apply “{{ target_albumartist }}”
+          <span id="apply-spinner" class="htmx-indicator spinner-border spinner-border-sm ms-1" role="status"></span>
         </button>
       </form>
-    </div>
-
-    <div class="panel p-3 mb-3">
-      <div class="panel-title">Preview</div>
-      <div id="preview-area">
-        {% include "partials/preview.html" %}
-      </div>
     </div>
 
     <div class="panel p-3">
       <div class="panel-title">Progress / Summary</div>
       <div id="apply-status">
-        <p class="muted mb-0">Apply results will appear here.</p>
+        <p class="muted mb-0">Select folders and click Apply. Progress will appear here.</p>
       </div>
     </div>
   </div>
@@ -96,24 +68,17 @@
 {% if not error %}
 <script>
 (function () {
-  const scanBtn = document.getElementById("scan-btn");
   const applyBtn = document.getElementById("apply-btn");
   const chips = document.getElementById("selected-chips");
   const hint = document.getElementById("no-selection-hint");
-  const aaInput = document.getElementById("albumartist-input");
-  const scanAa = document.getElementById("scan-albumartist");
-  const applyAa = document.getElementById("apply-albumartist");
   const clearBtn = document.getElementById("clear-selection");
-
-  function syncAlbumArtist() {
-    const v = aaInput.value;
-    scanAa.value = v;
-    applyAa.value = v;
-    updateApplyEnabled();
-  }
 
   function selectedChecks() {
     return Array.from(document.querySelectorAll(".folder-check:checked"));
+  }
+
+  function updateApplyEnabled() {
+    applyBtn.disabled = selectedChecks().length === 0;
   }
 
   function updateChips() {
@@ -135,28 +100,16 @@
       remove.addEventListener("click", () => {
         cb.checked = false;
         updateChips();
-        updateScanEnabled();
       });
       chip.appendChild(label);
       chip.appendChild(remove);
       chips.appendChild(chip);
     });
-    updateScanEnabled();
-  }
-
-  function updateScanEnabled() {
-    scanBtn.disabled = selectedChecks().length === 0;
-  }
-
-  function updateApplyEnabled() {
-    const hasPreview = document.querySelector("#preview-area table") !== null;
-    applyBtn.disabled = !hasPreview || !aaInput.value.trim();
+    updateApplyEnabled();
   }
 
   document.querySelectorAll(".folder-check").forEach((cb) => {
-    cb.addEventListener("change", () => {
-      updateChips();
-    });
+    cb.addEventListener("change", updateChips);
   });
 
   document.querySelectorAll(".folder-toggle:not(:disabled)").forEach((btn) => {
@@ -168,7 +121,6 @@
     });
   });
 
-  // Expand root by default
   const rootToggle = document.querySelector(".folder-toggle:not(:disabled)");
   if (rootToggle) {
     const children = rootToggle.closest(".folder-node").querySelector(":scope > .folder-children");
@@ -185,15 +137,6 @@
     updateChips();
   });
 
-  aaInput.addEventListener("input", syncAlbumArtist);
-
-  document.body.addEventListener("htmx:afterSwap", (evt) => {
-    if (evt.detail.target && evt.detail.target.id === "preview-area") {
-      updateApplyEnabled();
-    }
-  });
-
-  syncAlbumArtist();
   updateChips();
 })();
 </script>

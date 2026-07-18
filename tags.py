@@ -32,6 +32,12 @@ def read_flac_tags(path: str | Path) -> dict[str, Any]:
     }
 
 
+def get_albumartist(path: str | Path) -> str:
+    """Return the current albumartist tag (joined if multi-value), or empty string."""
+    audio = FLAC(str(path))
+    return _join_tag(audio, "albumartist")
+
+
 def set_albumartist(path: str | Path, value: str) -> None:
     """
     Set only the albumartist Vorbis comment on a FLAC file.

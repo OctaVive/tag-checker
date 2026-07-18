@@ -5,12 +5,15 @@
     <span class="stat-pill stat-skipped">Skipped: {{ job.skipped }}</span>
     <span class="stat-pill stat-failed">Failed: {{ job.failed }}</span>
   </div>
-  {% if job.total %}
-  <p class="muted small mb-3">Processed {{ job.total }} file{{ 's' if job.total != 1 else '' }}.</p>
+  {% if job.processed %}
+  <p class="muted small mb-3">Processed {{ job.processed }} file{{ 's' if job.processed != 1 else '' }}.</p>
   {% endif %}
   {% if job.errors %}
   <div class="alert alert-danger py-2 mb-0" role="alert">
     <strong>Errors</strong>
+    {% if job.failed and job.errors|length < job.failed %}
+    <p class="small mb-1">Showing {{ job.errors|length }} of {{ job.failed }} errors.</p>
+    {% endif %}
     <ul class="mb-0 mt-1 small">
       {% for err in job.errors %}
       <li>{{ err }}</li>
