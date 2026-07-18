@@ -1,0 +1,28 @@
+{% set pct = (job.current / job.total * 100) if job.total else 0 %}
+<div
+  id="apply-status"
+  hx-get="/apply/status"
+  hx-trigger="every 400ms"
+  hx-swap="outerHTML"
+>
+  <p class="mb-2">
+    Updating tags…
+    <span class="muted">
+      {{ job.current }} / {{ job.total }}
+      {% if job.current_file %} — {{ job.current_file }}{% endif %}
+    </span>
+  </p>
+  <div class="progress mb-2" style="height: 0.6rem; background: #121a26;">
+    <div
+      class="progress-bar"
+      role="progressbar"
+      style="width: {{ pct }}%; background: var(--accent);"
+      aria-valuenow="{{ job.current }}"
+      aria-valuemin="0"
+      aria-valuemax="{{ job.total }}"
+    ></div>
+  </div>
+  <p class="small muted mb-0">
+    Updated: {{ job.updated }} · Skipped: {{ job.skipped }} · Failed: {{ job.failed }}
+  </p>
+</div>

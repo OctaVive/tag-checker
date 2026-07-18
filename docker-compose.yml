@@ -1,0 +1,10 @@
+services:
+  flac-editor:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      MUSIC_PATH: /music
+      SECRET_KEY: change-me-in-production
+    volumes:
+      - ${HOST_MUSIC_PATH:-./music}:/music

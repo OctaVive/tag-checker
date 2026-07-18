@@ -1,0 +1,37 @@
+{% macro render_node(node, depth=0) %}
+<div class="folder-node" data-path="{{ node.path }}">
+  <div class="folder-row">
+    {% if node.children %}
+    <button type="button" class="folder-toggle" aria-label="Toggle" data-toggle-path="{{ node.path }}">▸</button>
+    {% else %}
+    <button type="button" class="folder-toggle" disabled aria-hidden="true">▸</button>
+    {% endif %}
+    <input
+      type="checkbox"
+      class="form-check-input folder-check m-0"
+      name="folders"
+      value="{{ node.path }}"
+      id="folder-{{ node.path | replace('/', '-') | replace(' ', '_') }}"
+      form="scan-form"
+    >
+    <label class="form-check-label flex-grow-1 mb-0" for="folder-{{ node.path | replace('/', '-') | replace(' ', '_') }}">
+      {{ node.name }}
+    </label>
+  </div>
+  {% if node.children %}
+  <div class="folder-children {% if depth > 0 %}collapsed{% endif %}" data-children-of="{{ node.path }}">
+    {% for child in node.children %}
+      {{ render_node(child, depth + 1) }}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div class="folder-tree">
+  {% if tree %}
+    {{ render_node(tree, 0) }}
+  {% else %}
+    <p class="muted mb-0">No folders found.</p>
+  {% endif %}
+</div>

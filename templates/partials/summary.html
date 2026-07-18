@@ -1,0 +1,23 @@
+<div id="apply-status">
+  <h3 class="h6 mb-3">Apply complete</h3>
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    <span class="stat-pill stat-updated">Updated: {{ job.updated }}</span>
+    <span class="stat-pill stat-skipped">Skipped: {{ job.skipped }}</span>
+    <span class="stat-pill stat-failed">Failed: {{ job.failed }}</span>
+  </div>
+  {% if job.total %}
+  <p class="muted small mb-3">Processed {{ job.total }} file{{ 's' if job.total != 1 else '' }}.</p>
+  {% endif %}
+  {% if job.errors %}
+  <div class="alert alert-danger py-2 mb-0" role="alert">
+    <strong>Errors</strong>
+    <ul class="mb-0 mt-1 small">
+      {% for err in job.errors %}
+      <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}
+  <p class="mb-0 text-success" style="color: var(--success) !important;">No errors.</p>
+  {% endif %}
+</div>

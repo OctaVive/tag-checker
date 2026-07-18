@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if error %}
+<div class="alert alert-danger" role="alert">
+  <strong>Cannot load music library.</strong> {{ error }}
+  <p class="mb-0 mt-2 small">Set the <code>MUSIC_PATH</code> environment variable to a valid directory (mounted at <code>/music</code> in Docker).</p>
+</div>
+{% else %}
+
+<div class="row g-4">
+  {# Left: folder tree + selection #}
+  <div class="col-lg-5">
+    <div class="panel p-3 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="panel-title mb-0">Folders</div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-selection">Clear</button>
+      </div>
+      {% include "partials/tree.html" %}
+    </div>
+
+    <div class="panel p-3">
+      <div class="panel-title">Selected folders</div>
+      <div id="selected-chips" class="chip-list mb-3">
+        <span class="muted small" id="no-selection-hint">None selected</span>
+      </div>
+      <form
+        id="scan-form"
+        hx-post="/scan"
+        hx-target="#preview-area"
+        hx-swap="innerHTML"
+        hx-indicator="#scan-spinner"
+      >
+        <input type="hidden" name="albumartist" id="scan-albumartist" value="">
+        <button type="submit" class="btn btn-accent w-100" id="scan-btn" disabled>
+          Scan
+          <span id="scan-spinner" class="htmx-indicator spinner-border spinner-border-sm ms-1" role="status"></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {# Right: AlbumArtist + preview + apply #}
+  <div class="col-lg-7">
+    <div class="panel p-3 mb-3">
+      <div class="panel-title">New AlbumArtist</div>
+      <div class="input-group mb-3">
+        <input
+          type="text"
+          class="form-control"
+          id="albumartist-input"
+          name="albumartist"
+          placeholder="e.g. Various Artists"
+          autocomplete="off"
+          hx-post="/preview"
+          hx-trigger="keyup changed delay:300ms"
+          hx-target="#preview-area"
+          hx-swap="innerHTML"
+          hx-include="[name='albumartist']"
+        >
+      </div>
+      <p class="muted small mb-3">Preview updates as you type. Apply writes only the AlbumArtist tag.</p>
+      <form
+        id="apply-form"
+        hx-post="/apply"
+        hx-target="#apply-status"
+        hx-swap="outerHTML"
+      >
+        <input type="hidden" name="albumartist" id="apply-albumartist" value="">
+        <button type="submit" class="btn btn-success" id="apply-btn" disabled>
+          Apply
+        </button>
+      </form>
+    </div>
+
+    <div class="panel p-3 mb-3">
+      <div class="panel-title">Preview</div>
+      <div id="preview-area">
+        {% include "partials/preview.html" %}
+      </div>
+    </div>
+
+    <div class="panel p-3">
+      <div class="panel-title">Progress / Summary</div>
+      <div id="apply-status">
+        <p class="muted mb-0">Apply results will appear here.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not error %}
+<script>
+(function () {
+  const scanBtn = document.getElementById("scan-btn");
+  const applyBtn = document.getElementById("apply-btn");
+  const chips = document.getElementById("selected-chips");
+  const hint = document.getElementById("no-selection-hint");
+  const aaInput = document.getElementById("albumartist-input");
+  const scanAa = document.getElementById("scan-albumartist");
+  const applyAa = document.getElementById("apply-albumartist");
+  const clearBtn = document.getElementById("clear-selection");
+
+  function syncAlbumArtist() {
+    const v = aaInput.value;
+    scanAa.value = v;
+    applyAa.value = v;
+    updateApplyEnabled();
+  }
+
+  function selectedChecks() {
+    return Array.from(document.querySelectorAll(".folder-check:checked"));
+  }
+
+  function updateChips() {
+    const checked = selectedChecks();
+    chips.querySelectorAll(".chip").forEach((el) => el.remove());
+    if (hint) {
+      hint.style.display = checked.length ? "none" : "";
+    }
+    checked.forEach((cb) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      const label = document.createElement("span");
+      label.textContent = cb.value;
+      label.title = cb.value;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.setAttribute("aria-label", "Remove");
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        cb.checked = false;
+        updateChips();
+        updateScanEnabled();
+      });
+      chip.appendChild(label);
+      chip.appendChild(remove);
+      chips.appendChild(chip);
+    });
+    updateScanEnabled();
+  }
+
+  function updateScanEnabled() {
+    scanBtn.disabled = selectedChecks().length === 0;
+  }
+
+  function updateApplyEnabled() {
+    const hasPreview = document.querySelector("#preview-area table") !== null;
+    applyBtn.disabled = !hasPreview || !aaInput.value.trim();
+  }
+
+  document.querySelectorAll(".folder-check").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      updateChips();
+    });
+  });
+
+  document.querySelectorAll(".folder-toggle:not(:disabled)").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const children = btn.closest(".folder-node").querySelector(":scope > .folder-children");
+      if (!children) return;
+      const collapsed = children.classList.toggle("collapsed");
+      btn.textContent = collapsed ? "▸" : "▾";
+    });
+  });
+
+  // Expand root by default
+  const rootToggle = document.querySelector(".folder-toggle:not(:disabled)");
+  if (rootToggle) {
+    const children = rootToggle.closest(".folder-node").querySelector(":scope > .folder-children");
+    if (children) {
+      children.classList.remove("collapsed");
+      rootToggle.textContent = "▾";
+    }
+  }
+
+  clearBtn.addEventListener("click", () => {
+    document.querySelectorAll(".folder-check:checked").forEach((cb) => {
+      cb.checked = false;
+    });
+    updateChips();
+  });
+
+  aaInput.addEventListener("input", syncAlbumArtist);
+
+  document.body.addEventListener("htmx:afterSwap", (evt) => {
+    if (evt.detail.target && evt.detail.target.id === "preview-area") {
+      updateApplyEnabled();
+    }
+  });
+
+  syncAlbumArtist();
+  updateChips();
+})();
+</script>
+{% endif %}
+{% endblock %}
