@@ -7,12 +7,25 @@ from typing import Any, Literal
 
 from mutagen.flac import FLAC
 
+# Nonstandard AlbumArtist keys to remove (keep standard "albumartist" only).
+_LEGACY_ALBUMARTIST_FORMS = frozenset({"album artist", "album_artist"})
+
 
 def _join_tag(audio: FLAC, key: str) -> str:
     values = audio.get(key)
     if not values:
         return ""
     return "; ".join(str(v) for v in values)
+
+
+def _legacy_albumartist_keys(audio: FLAC) -> list[str]:
+    """Return tag keys that are spaced/underscore AlbumArtist variants (not albumartist)."""
+    found: list[str] = []
+    for key in audio.keys():
+        lower = key.lower()
+        if lower in _LEGACY_ALBUMARTIST_FORMS:
+            found.append(key)
+    return found
 
 
 def read_flac_tags(path: str | Path) -> dict[str, Any]:
@@ -48,16 +61,23 @@ def get_albumartist(path: str | Path) -> str:
 
 def ensure_albumartist(path: str | Path, value: str) -> Literal["updated", "skipped"]:
     """
-    Open the FLAC once. Skip if albumartist already matches; otherwise set and save.
-    Clears in-memory picture data after use to limit RAM with large embedded art.
+    Open the FLAC once. Set standard albumartist; remove legacy ALBUM ARTIST keys.
+    Skip only when albumartist already matches and no legacy keys remain.
     """
     path_str = str(path)
     audio = FLAC(path_str)
     try:
         current = _join_tag(audio, "albumartist").strip()
-        if current == value:
+        legacy_keys = _legacy_albumartist_keys(audio)
+        if current == value and not legacy_keys:
             return "skipped"
+
         audio["albumartist"] = [value]
+        for key in legacy_keys:
+            try:
+                del audio[key]
+            except KeyError:
+                pass
         audio.save()
         return "updated"
     finally:
@@ -73,6 +93,6 @@ def ensure_albumartist(path: str | Path, value: str) -> Literal["updated", "skip
 def set_albumartist(path: str | Path, value: str) -> None:
     """
     Set only the albumartist Vorbis comment on a FLAC file.
-    All other metadata is preserved.
+    All other metadata is preserved (aside from removing legacy AlbumArtist keys).
     """
     ensure_albumartist(path, value)

@@ -209,9 +209,14 @@ def index():
     error = None
     tree = None
     music_root = None
+    active_job = None
     try:
+        _session_id()
         music_root = str(get_music_root())
         tree = _cached_folder_tree()
+        job = _get_job()
+        if job and job.get("status") == "running":
+            active_job = job
     except (FileNotFoundError, NotADirectoryError, OSError) as exc:
         error = str(exc)
     return render_template(
@@ -220,6 +225,7 @@ def index():
         music_root=music_root,
         error=error,
         target_albumartist=TARGET_ALBUMARTIST,
+        active_job=active_job,
     )
 
 

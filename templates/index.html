@@ -25,7 +25,8 @@
       </div>
       <p class="muted small mb-0">
         Apply walks each selected folder (including subfolders) and sets AlbumArtist to
-        <strong>{{ target_albumartist }}</strong>. Only that tag is changed.
+        <strong>{{ target_albumartist }}</strong>. Removes legacy <code>ALBUM ARTIST</code>
+        (spaced) tags; only the standard AlbumArtist field is kept.
       </p>
     </div>
   </div>
@@ -45,7 +46,8 @@
         hx-indicator="#apply-spinner"
       >
         {# Checkboxes use form="apply-form" in tree.html #}
-        <button type="submit" class="btn btn-success" id="apply-btn" disabled>
+        <button type="submit" class="btn btn-success" id="apply-btn" disabled
+          {% if active_job %}data-job-running="1"{% endif %}>
           Apply “{{ target_albumartist }}”
           <span id="apply-spinner" class="htmx-indicator spinner-border spinner-border-sm ms-1" role="status"></span>
         </button>
@@ -54,9 +56,15 @@
 
     <div class="panel p-3">
       <div class="panel-title">Progress / Summary</div>
+      {% if active_job %}
+        {% with job=active_job %}
+          {% include "partials/progress.html" %}
+        {% endwith %}
+      {% else %}
       <div id="apply-status">
         <p class="muted mb-0">Select folders and click Apply. Progress will appear here.</p>
       </div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -78,8 +86,22 @@
   }
 
   function updateApplyEnabled() {
+    if (applyBtn.dataset.jobRunning === "1") {
+      applyBtn.disabled = true;
+      return;
+    }
     applyBtn.disabled = selectedChecks().length === 0;
   }
+
+  document.body.addEventListener("htmx:afterSwap", (evt) => {
+    if (evt.detail.target && evt.detail.target.id === "apply-status") {
+      const done = evt.detail.target.querySelector("h3") !== null;
+      if (done) {
+        delete applyBtn.dataset.jobRunning;
+        updateApplyEnabled();
+      }
+    }
+  });
 
   function updateChips() {
     const checked = selectedChecks();
