@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import json
 import os
+import re
 import tempfile
 import threading
 import time
@@ -25,6 +26,7 @@ MAX_ERRORS = 50
 PROGRESS_EVERY_N = 50
 PROGRESS_EVERY_SEC = 1.0
 GC_EVERY_N = 200
+_YEAR_RE = re.compile(r"^\d{4}$")
 
 _job_meta: dict[str, Any] = {}
 _meta_lock = threading.Lock()
@@ -76,6 +78,8 @@ def _empty_done_job(errors: list[str] | None = None) -> dict[str, Any]:
         "errors": errors or [],
         "current_file": "",
         "renumber_enabled": False,
+        "year_enabled": False,
+        "year_value": None,
     }
 
 
@@ -90,7 +94,12 @@ def _cached_folder_tree() -> dict[str, Any]:
     return tree
 
 
-def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False) -> None:
+def _run_apply(
+    sid: str,
+    selected_dirs: list[str],
+    renumber_tracks: bool = False,
+    year: str | None = None,
+) -> None:
     processed = 0
     updated = 0
     renumbered = 0
@@ -99,6 +108,7 @@ def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False
     errors: list[str] = []
     last_write = 0.0
     current_file = ""
+    year_enabled = year is not None
 
     state = {
         "status": "running",
@@ -110,6 +120,8 @@ def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False
         "errors": [],
         "current_file": "",
         "renumber_enabled": renumber_tracks,
+        "year_enabled": year_enabled,
+        "year_value": year,
     }
     _write_job(sid, state)
 
@@ -131,6 +143,8 @@ def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False
                 "errors": list(errors),
                 "current_file": current_file,
                 "renumber_enabled": renumber_tracks,
+                "year_enabled": year_enabled,
+                "year_value": year,
             },
         )
 
@@ -149,7 +163,7 @@ def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False
             processed += 1
             current_file = Path(path).name
             try:
-                result = ensure_va_compilation(path, renumber=renumber)
+                result = ensure_va_compilation(path, renumber=renumber, year=year)
                 if result == "skipped":
                     skipped += 1
                 else:
@@ -184,6 +198,8 @@ def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False
             "errors": errors,
             "current_file": "",
             "renumber_enabled": renumber_tracks,
+            "year_enabled": year_enabled,
+            "year_value": year,
         },
     )
     with _meta_lock:
@@ -191,13 +207,18 @@ def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False
     gc.collect()
 
 
-def _start_apply_worker(sid: str, selected: list[str], renumber_tracks: bool) -> threading.Thread | Any:
+def _start_apply_worker(
+    sid: str,
+    selected: list[str],
+    renumber_tracks: bool,
+    year: str | None,
+) -> threading.Thread | Any:
     """Start apply in a child process (keeps UI responsive). Fall back to a thread."""
 
     def start_thread() -> threading.Thread:
         thread = threading.Thread(
             target=_run_apply,
-            args=(sid, list(selected), renumber_tracks),
+            args=(sid, list(selected), renumber_tracks, year),
             daemon=True,
             name=f"flac-apply-{sid[:8]}",
         )
@@ -210,7 +231,7 @@ def _start_apply_worker(sid: str, selected: list[str], renumber_tracks: bool) ->
         ctx = get_context("spawn")
         proc = ctx.Process(
             target=_run_apply,
-            args=(sid, list(selected), renumber_tracks),
+            args=(sid, list(selected), renumber_tracks, year),
             daemon=True,
             name=f"flac-apply-{sid[:8]}",
         )
@@ -254,6 +275,17 @@ def index():
 def apply():
     selected = request.form.getlist("folders")
     renumber_tracks = request.form.get("renumber") == "1"
+    set_year = request.form.get("set_year") == "1"
+    year_raw = (request.form.get("year") or "").strip()
+    year: str | None = None
+    if set_year:
+        if not _YEAR_RE.fullmatch(year_raw):
+            return render_template(
+                "partials/summary.html",
+                job=_empty_done_job(["Enter a valid 4-digit year (YYYY) when Set year is enabled."]),
+            ), 400
+        year = year_raw
+
     if not selected:
         return render_template(
             "partials/summary.html",
@@ -285,7 +317,7 @@ def apply():
             job = _get_job() or existing
             return render_template("partials/progress.html", job=job)
 
-    worker = _start_apply_worker(sid, list(selected), renumber_tracks)
+    worker = _start_apply_worker(sid, list(selected), renumber_tracks, year)
     with _meta_lock:
         _job_meta[sid] = worker
 
@@ -300,6 +332,8 @@ def apply():
         "errors": [],
         "current_file": "",
         "renumber_enabled": renumber_tracks,
+        "year_enabled": year is not None,
+        "year_value": year,
     }
     return render_template("partials/progress.html", job=job)
 

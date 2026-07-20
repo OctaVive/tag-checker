@@ -52,6 +52,29 @@
             Renumber tracks per folder (1..N, disc 1/1)
           </label>
         </div>
+        <div class="mb-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="set_year" name="set_year">
+            <label class="form-check-label" for="set_year">
+              Set year for all tracks
+            </label>
+          </div>
+          <div class="mt-2 ms-4">
+            <label class="form-label small muted mb-1" for="year">Year (YYYY)</label>
+            <input
+              class="form-control form-control-sm"
+              type="text"
+              id="year"
+              name="year"
+              inputmode="numeric"
+              pattern="\d{4}"
+              maxlength="4"
+              placeholder="1985"
+              disabled
+              style="max-width: 8rem;"
+            >
+          </div>
+        </div>
         {# Checkboxes use form="apply-form" in tree.html #}
         <button type="submit" class="btn btn-success" id="apply-btn" disabled
           {% if active_job %}data-job-running="1"{% endif %}>
@@ -87,6 +110,16 @@
   const chips = document.getElementById("selected-chips");
   const hint = document.getElementById("no-selection-hint");
   const clearBtn = document.getElementById("clear-selection");
+  const setYearCheck = document.getElementById("set_year");
+  const yearInput = document.getElementById("year");
+
+  function syncYearInput() {
+    if (!setYearCheck || !yearInput) return;
+    yearInput.disabled = !setYearCheck.checked;
+    if (!setYearCheck.checked) {
+      yearInput.value = "";
+    }
+  }
 
   function selectedChecks() {
     return Array.from(document.querySelectorAll(".folder-check:checked"));
@@ -165,6 +198,11 @@
     });
     updateChips();
   });
+
+  if (setYearCheck) {
+    setYearCheck.addEventListener("change", syncYearInput);
+    syncYearInput();
+  }
 
   updateChips();
 })();

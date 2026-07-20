@@ -87,13 +87,14 @@ def ensure_va_compilation(
     path: str | Path,
     *,
     renumber: tuple[int, int] | None = None,
+    year: str | None = None,
 ) -> Literal["updated", "skipped"]:
     """
     Normalize a FLAC for a Various Artists compilation.
 
     Sets standard albumartist and COMPILATION=1, removes legacy AlbumArtist keys,
     strips album-level MusicBrainz/release tags that split Navidrome albums, and
-    optionally rewrites track/disc numbering for folder-based compilations.
+    optionally rewrites track/disc numbering and year/date tags.
     """
     path_str = str(path)
     audio = FLAC(path_str)
@@ -121,7 +122,25 @@ def ensure_va_compilation(
                 )
             )
 
-        if current == VA_ALBUMARTIST and compilation == COMPILATION_VALUE and not legacy_keys and not removable_keys and not needs_renumber:
+        needs_year = False
+        if year is not None:
+            needs_year = any(
+                (
+                    _join_tag(audio, "date").strip() != year,
+                    _join_tag(audio, "year").strip() != year,
+                    _join_tag(audio, "originaldate").strip() != year,
+                    _join_tag(audio, "originalyear").strip() != year,
+                )
+            )
+
+        if (
+            current == VA_ALBUMARTIST
+            and compilation == COMPILATION_VALUE
+            and not legacy_keys
+            and not removable_keys
+            and not needs_renumber
+            and not needs_year
+        ):
             return "skipped"
 
         audio["albumartist"] = [VA_ALBUMARTIST]
@@ -146,6 +165,11 @@ def ensure_va_compilation(
                     del audio[key]
                 except KeyError:
                     pass
+        if year is not None:
+            audio["date"] = [year]
+            audio["year"] = [year]
+            audio["originaldate"] = [year]
+            audio["originalyear"] = [year]
         audio.save()
         return "updated"
     finally:
