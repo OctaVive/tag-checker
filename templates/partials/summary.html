@@ -2,11 +2,17 @@
   <h3 class="h6 mb-3">Apply complete</h3>
   <div class="d-flex flex-wrap gap-2 mb-3">
     <span class="stat-pill stat-updated">Updated: {{ job.updated }}</span>
+    {% if job.renumber_enabled %}
+    <span class="stat-pill">Renumbered: {{ job.renumbered }}</span>
+    {% endif %}
     <span class="stat-pill stat-skipped">Skipped: {{ job.skipped }}</span>
     <span class="stat-pill stat-failed">Failed: {{ job.failed }}</span>
   </div>
   {% if job.processed %}
-  <p class="muted small mb-3">Processed {{ job.processed }} file{{ 's' if job.processed != 1 else '' }}.</p>
+  <p class="muted small mb-3">
+    Processed {{ job.processed }} file{{ 's' if job.processed != 1 else '' }}.
+    {% if job.renumber_enabled %}Track numbering was normalized per folder where files were updated.{% endif %}
+  </p>
   {% endif %}
   {% if job.errors %}
   <div class="alert alert-danger py-2 mb-0" role="alert">

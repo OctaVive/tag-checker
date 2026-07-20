@@ -14,8 +14,8 @@ from typing import Any
 
 from flask import Flask, render_template, request, session
 
-from scanner import build_folder_tree, get_music_root, iter_flac_files, validate_selected_dirs
-from tags import ensure_albumartist
+from scanner import build_folder_tree, get_music_root, group_flac_paths_by_folder, iter_flac_files, validate_selected_dirs
+from tags import ensure_va_compilation
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "flac-albumartist-dev-key")
@@ -70,10 +70,12 @@ def _empty_done_job(errors: list[str] | None = None) -> dict[str, Any]:
         "status": "done",
         "processed": 0,
         "updated": 0,
+        "renumbered": 0,
         "skipped": 0,
         "failed": 0,
         "errors": errors or [],
         "current_file": "",
+        "renumber_enabled": False,
     }
 
 
@@ -88,9 +90,10 @@ def _cached_folder_tree() -> dict[str, Any]:
     return tree
 
 
-def _run_apply(sid: str, selected_dirs: list[str]) -> None:
+def _run_apply(sid: str, selected_dirs: list[str], renumber_tracks: bool = False) -> None:
     processed = 0
     updated = 0
+    renumbered = 0
     skipped = 0
     failed = 0
     errors: list[str] = []
@@ -101,10 +104,12 @@ def _run_apply(sid: str, selected_dirs: list[str]) -> None:
         "status": "running",
         "processed": 0,
         "updated": 0,
+        "renumbered": 0,
         "skipped": 0,
         "failed": 0,
         "errors": [],
         "current_file": "",
+        "renumber_enabled": renumber_tracks,
     }
     _write_job(sid, state)
 
@@ -120,23 +125,37 @@ def _run_apply(sid: str, selected_dirs: list[str]) -> None:
                 "status": "running",
                 "processed": processed,
                 "updated": updated,
+                "renumbered": renumbered,
                 "skipped": skipped,
                 "failed": failed,
                 "errors": list(errors),
                 "current_file": current_file,
+                "renumber_enabled": renumber_tracks,
             },
         )
 
     try:
-        for path in iter_flac_files(selected_dirs):
+        if renumber_tracks:
+            grouped = group_flac_paths_by_folder(list(iter_flac_files(selected_dirs)))
+            file_items = [
+                (path, (index, len(paths)))
+                for paths in grouped.values()
+                for index, path in enumerate(paths, start=1)
+            ]
+        else:
+            file_items = [(path, None) for path in iter_flac_files(selected_dirs)]
+
+        for path, renumber in file_items:
             processed += 1
             current_file = Path(path).name
             try:
-                result = ensure_albumartist(path, TARGET_ALBUMARTIST)
+                result = ensure_va_compilation(path, renumber=renumber)
                 if result == "skipped":
                     skipped += 1
                 else:
                     updated += 1
+                    if renumber is not None:
+                        renumbered += 1
             except Exception as exc:  # noqa: BLE001 — surface per-file errors in UI
                 failed += 1
                 if len(errors) < MAX_ERRORS:
@@ -159,10 +178,12 @@ def _run_apply(sid: str, selected_dirs: list[str]) -> None:
             "status": "done",
             "processed": processed,
             "updated": updated,
+            "renumbered": renumbered,
             "skipped": skipped,
             "failed": failed,
             "errors": errors,
             "current_file": "",
+            "renumber_enabled": renumber_tracks,
         },
     )
     with _meta_lock:
@@ -170,13 +191,13 @@ def _run_apply(sid: str, selected_dirs: list[str]) -> None:
     gc.collect()
 
 
-def _start_apply_worker(sid: str, selected: list[str]) -> threading.Thread | Any:
+def _start_apply_worker(sid: str, selected: list[str], renumber_tracks: bool) -> threading.Thread | Any:
     """Start apply in a child process (keeps UI responsive). Fall back to a thread."""
 
     def start_thread() -> threading.Thread:
         thread = threading.Thread(
             target=_run_apply,
-            args=(sid, list(selected)),
+            args=(sid, list(selected), renumber_tracks),
             daemon=True,
             name=f"flac-apply-{sid[:8]}",
         )
@@ -189,7 +210,7 @@ def _start_apply_worker(sid: str, selected: list[str]) -> threading.Thread | Any
         ctx = get_context("spawn")
         proc = ctx.Process(
             target=_run_apply,
-            args=(sid, list(selected)),
+            args=(sid, list(selected), renumber_tracks),
             daemon=True,
             name=f"flac-apply-{sid[:8]}",
         )
@@ -232,6 +253,7 @@ def index():
 @app.route("/apply", methods=["POST"])
 def apply():
     selected = request.form.getlist("folders")
+    renumber_tracks = request.form.get("renumber") == "1"
     if not selected:
         return render_template(
             "partials/summary.html",
@@ -263,7 +285,7 @@ def apply():
             job = _get_job() or existing
             return render_template("partials/progress.html", job=job)
 
-    worker = _start_apply_worker(sid, list(selected))
+    worker = _start_apply_worker(sid, list(selected), renumber_tracks)
     with _meta_lock:
         _job_meta[sid] = worker
 
@@ -272,10 +294,12 @@ def apply():
         "status": "running",
         "processed": 0,
         "updated": 0,
+        "renumbered": 0,
         "skipped": 0,
         "failed": 0,
         "errors": [],
         "current_file": "",
+        "renumber_enabled": renumber_tracks,
     }
     return render_template("partials/progress.html", job=job)
 

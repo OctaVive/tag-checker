@@ -115,3 +115,14 @@ def iter_flac_files(selected_dirs: list[str], root: Path | None = None) -> Itera
             for name in filenames:
                 if name.lower().endswith(".flac"):
                     yield str(Path(dirpath) / name)
+
+
+def group_flac_paths_by_folder(paths: list[str]) -> dict[str, list[str]]:
+    """Group FLAC paths by parent folder and sort each group by filename."""
+    grouped: dict[str, list[str]] = {}
+    for raw_path in paths:
+        path = Path(raw_path)
+        grouped.setdefault(str(path.parent), []).append(str(path))
+    for folder, folder_paths in grouped.items():
+        grouped[folder] = sorted(folder_paths, key=lambda item: Path(item).name.lower())
+    return grouped

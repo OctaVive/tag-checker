@@ -19,6 +19,8 @@
     ></div>
   </div>
   <p class="small muted mb-0">
-    Updated: {{ job.updated }} · Skipped: {{ job.skipped }} · Failed: {{ job.failed }}
+    Updated: {{ job.updated }}
+    {% if job.renumber_enabled %} · Renumbered: {{ job.renumbered }}{% endif %}
+    · Skipped: {{ job.skipped }} · Failed: {{ job.failed }}
   </p>
 </div>
